@@ -97,8 +97,8 @@
           const stream = await navigator.mediaDevices.getUserMedia({
             audio: true,
           });
-          const audioContext = new (window.AudioContext ||
-            window.webkitAudioContext)();
+         window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+const audioContext = window.audioContext;
           const source = audioContext.createMediaStreamSource(stream);
           const analyser = audioContext.createAnalyser();
           analyser.fftSize = 512;
@@ -166,7 +166,26 @@
         }, 1200);
       }
 
-      startMicDetection();
+// ✅ Mobile-friendly mic setup
+async function enableMic() {
+  try {
+    // Resume AudioContext if it's suspended
+    if (window.audioContext && window.audioContext.state === "suspended") {
+      await window.audioContext.resume();
+    } else {
+      await startMicDetection();
+    }
+  } catch (err) {
+    console.error("Error enabling mic:", err);
+  }
+  document.removeEventListener("click", enableMic);
+}
+
+// Wait for user tap (mobile browsers need a gesture)
+document.addEventListener("click", enableMic);
+    </script>
+  </body>
+</html>
     </script>
   </body>
 </html>
