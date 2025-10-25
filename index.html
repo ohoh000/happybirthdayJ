@@ -91,80 +91,82 @@
 
       createCandles(candleCount);
 
-      // === Microphone / Blow Detection ===
-      async function startMicDetection() {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-          });
-         window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-const audioContext = window.audioContext;
-          const source = audioContext.createMediaStreamSource(stream);
-          const analyser = audioContext.createAnalyser();
-          analyser.fftSize = 512;
+     // === Microphone / Blow Detection (Mobile Optimized + Extra Sensitive) ===
+let audioContext;
+let blown = false;
 
-          source.connect(analyser);
+async function startMicDetection() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
 
-          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    source.connect(analyser);
 
-          let blown = false;
+    function detectBlow() {
+      analyser.getByteTimeDomainData(dataArray);
 
-          function detectBlow() {
-            analyser.getByteFrequencyData(dataArray);
+      // Calculate "volume" from waveform amplitude
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        const val = (dataArray[i] - 128) / 128; // center around 0
+        sum += val * val;
+      }
+      const rms = Math.sqrt(sum / dataArray.length);
 
-            let highFreqSum = 0;
-            let lowFreqSum = 0;
+      // Super sensitive threshold (works on mobile)
+      const BLOW_VOLUME_THRESHOLD = 0.05;
 
-            const midpoint = dataArray.length / 2;
-
-            for (let i = 0; i < dataArray.length; i++) {
-              if (i < midpoint) {
-                lowFreqSum += dataArray[i];
-              } else {
-                highFreqSum += dataArray[i];
-              }
-            }
-
-            const highAvg = highFreqSum / (dataArray.length / 2);
-            const lowAvg = lowFreqSum / (dataArray.length / 2);
-
-            const ratio = highAvg / (lowAvg + 1);
-
-            const BLOW_RATIO_THRESHOLD = 0.5;
-
-            if (ratio > BLOW_RATIO_THRESHOLD && !blown) {
-              blown = true;
-              blowOutCandles();
-            }
-
-            requestAnimationFrame(detectBlow);
-          }
-
-          detectBlow();
-        } catch (err) {
-          console.error("Mic access error:", err);
-        }
+      if (rms > BLOW_VOLUME_THRESHOLD && !blown) {
+        blown = true;
+        blowOutCandles();
       }
 
-      function blowOutCandles() {
-        const candles = document.querySelectorAll(".candle");
-        candles.forEach((candle) => {
-          const delay = Math.random() * 1000;
-          setTimeout(() => {
-            colors.forEach((color) => {
-              if (candle.classList.contains(color)) {
-                candle.classList.add("blown");
-              }
-            });
-          }, delay);
-        });
+      requestAnimationFrame(detectBlow);
+    }
 
-        // Update subTitle after short delay
-        setTimeout(() => {
-          const subTitle = document.getElementById("subTitle");
-          subTitle.textContent = `Yay! I'm hoping we can spend the next one together :D wo xiang ni >_< 🎉`;
-        }, 1200);
-      }
+    detectBlow();
+  } catch (err) {
+    console.error("Mic access error:", err);
+  }
+}
+
+// === Resume mic after user tap (needed for iOS / Chrome mobile) ===
+async function enableMic() {
+  try {
+    if (!audioContext) {
+      await startMicDetection();
+    } else if (audioContext.state === "suspended") {
+      await audioContext.resume();
+    }
+  } catch (err) {
+    console.error("Mic resume error:", err);
+  }
+  document.removeEventListener("click", enableMic);
+}
+
+document.addEventListener("click", enableMic);
+
+function blowOutCandles() {
+  const candles = document.querySelectorAll(".candle");
+  candles.forEach((candle) => {
+    const delay = Math.random() * 800;
+    setTimeout(() => {
+      candle.classList.add("blown");
+    }, delay);
+  });
+
+  setTimeout(() => {
+    const subTitle = document.getElementById("subTitle");
+    if (subTitle) {
+      subTitle.textContent =
+        "Yay! I'm hoping we can spend the next one together :D wo xiang ni >_< 🎉";
+    }
+  }, 1000);
+}
 
 // ✅ Mobile-friendly mic setup
 async function enableMic() {
@@ -183,9 +185,6 @@ async function enableMic() {
 
 // Wait for user tap (mobile browsers need a gesture)
 document.addEventListener("click", enableMic);
-    </script>
-  </body>
-</html>
     </script>
   </body>
 </html>
